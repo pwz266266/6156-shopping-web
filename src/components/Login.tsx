@@ -2,6 +2,7 @@
 // When register, first name and last name are required and showed.
 import React from "react";
 import { Button, Col, Form, Row } from "react-bootstrap";
+import { Url } from "../data/url";
 
 export function LoginLogoutRegister() {
     const [userId, setUserId] = React.useState("");
@@ -13,25 +14,116 @@ export function LoginLogoutRegister() {
     const [phone, setPhone] = React.useState("");
     const [isRegister, setIsRegister] = React.useState(false);
     
+    async function fetchUserInfo() {
+        if (localStorage.getItem("user_id") !== null) {
+            const response = await fetch(Url + "/users/" + localStorage.getItem("user_id"));
+            const data = await response.json();
+            const userData = data["data"];
+            setFirstName(userData["first_name"]);
+            setLastName(userData["last_name"]);
+            fetchContact("email");
+            fetchContact("address");
+            fetchContact("phone");
+        }
+    }
+    React.useEffect(() => {
+        fetchUserInfo();
+    }, []);
+
+    async function fetchContact(type: string) {
+        const response = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/" +  type);
+        const data = await response.json();
+        const contactData = data;
+        if (type === "email") {
+            setEmail(contactData["email"]);
+        } else if (type === "address") {
+            setAddress(contactData["address"]);
+        } else if (type === "phone") {
+            setPhone(contactData["phone"]);
+        }
+    }
+
+    async function updateInfo() {
+        const response = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/email", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                email: email,
+            }),
+        });
+        const response2 = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/address", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                address: address,
+            }),
+        });
+        const response3 = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/phone", {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                phone: phone,
+            }),
+        });
+        setError("Updated!");
+    }
+
     async function login() {
         if (userId === "") {
             setError("Please enter a user id");
             return;
         }
+        // Get user info from backend
+        const response = await fetch(Url+"/users/" + userId);
+        if (response.status === 404 || response.status === 400) {
+            setError("User not found");
+            return;
+        }
+        const data = await response.json();
+        if (data["data"] === null) {
+            setError("User does not exist");
+            return;
+        }
         localStorage.setItem("user_id", userId);
-        window.location.reload();
+        fetchUserInfo();
+        setError("");
     }
-
+    async function deleteAccount() {
+        const response = await fetch(Url + "/users/" + localStorage.getItem("user_id"), {
+            method: "DELETE",
+        });
+        const response2 = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/email", {
+            method: "DELETE",
+        });
+        const response3 = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/address", {
+            method: "DELETE",
+        });
+        const response4 = await fetch(Url + "/contact/" + localStorage.getItem("user_id") + "/phone", {
+            method: "DELETE",
+        });
+        if (response.status === 200) {
+            logout();
+            setError("Account deleted");
+        } else {
+            setError("Error deleting account");
+        }
+    }
     async function logout() {
         localStorage.removeItem("user_id");
-        window.location.reload();
+        setUserId("");
+        setFirstName("");
+        setLastName("");
+        setError("");
+        // window.location.reload();
     }
 
     async function register() {
-        if (userId === "") {
-            setError("Please enter a user id");
-            return;
-        }
         if (firstName === "") {
             setError("Please enter a first name");
             return;
@@ -40,8 +132,56 @@ export function LoginLogoutRegister() {
             setError("Please enter a last name");
             return;
         }
-        localStorage.setItem("user_id", userId);
-        window.location.reload();
+        // Use first name and last name to register
+        const response = await fetch(Url+"/users", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                "first_name": firstName,
+                "last_name": lastName,
+            }),
+        });
+        if (response.status === 400) {
+            setError("User already exists");
+            return;
+        }
+        const data = await response.json();
+        localStorage.setItem("user_id", data["data"]["user_id"]);
+        // Post email, address, phone to be empty
+        const response2 = await fetch(Url+"/contact/" + localStorage.getItem("user_id") + "/email", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                email: "",
+            }),
+        });
+        const response3 = await fetch(Url+"/contact/" + localStorage.getItem("user_id") + "/address", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                address: "",
+            }),
+        });
+        const response4 = await fetch(Url+"/contact/" + localStorage.getItem("user_id") + "/phone", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                phone: "",
+            }),
+        });
+        fetchUserInfo();
+        setError("");
+        setIsRegister(false);
+        // localStorage.setItem("user_id", userId);
+        // window.location.reload();
     }
 
     async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -52,10 +192,6 @@ export function LoginLogoutRegister() {
         } catch {
             setError("User doesn't exist.");
         }
-    }
-    
-    async function updateInfo() {
-        window.location.reload();
     }
 
     // First check if user id is in local storage, if so, show logout button
@@ -82,7 +218,7 @@ export function LoginLogoutRegister() {
             </Form.Group>
             <Form.Group as={Row} className="mb-3">
                 <Col sm={{ span: 10, offset: 2 }}>
-                    <Button type="submit" className="ms-2" >Register</Button>
+                    <Button type="submit" className="ms-2" onClick={() => register()}>Register</Button>
                     <Button variant="danger" className="ms-2" onClick={() => setIsRegister(false)}>Go Back</Button>
                 </Col>
             </Form.Group>
@@ -122,6 +258,7 @@ export function LoginLogoutRegister() {
                             <Col sm={{ span: 10 }}>
                                 <Button variant="primary" className="ms-3" onClick={updateInfo}>Update Info</Button>
                                 <Button variant="danger" className="ms-3" onClick={logout}>Logout</Button>
+                                <Button variant="danger" className="ms-3" onClick={deleteAccount}>Delete Account</Button>
                             </Col>
                         </Form.Group>
                     </Form>
